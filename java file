@@ -1,0 +1,1668 @@
+package scriptgenerator;
+import java.util.*;
+import java.io.*;
+
+public class ScriptGenerator{
+
+final ArrayList<String> AlterList = new ArrayList<>(); //ArrayList to hold "add...." statements to be added in a second place for replication
+final ArrayList<String> InsertList = new ArrayList<>(); //ArrayList to hold "insert into...." statements for replication 
+final ArrayList<String> BZList = new ArrayList<>(); //arraylist to hold blue zone replication statements
+final ArrayList<String> GZList = new ArrayList<>(); //arraylist to hold green zone replication statements    
+private boolean contScriptGen = true;
+private String statement; //the SQL statement the user creates
+Scanner scan = new Scanner(System.in);
+String schemaname;
+String tablename;
+String schematable;
+String altInput;
+String alterIn; 
+String colname;
+String repstate;
+String repstate2;
+String colrep;
+String bluerep;
+String bluerep2;
+String bluerep3;
+String bluerep4;
+String bluerep5; 
+String bluerepfinal;
+String tbsname;
+String datatype;
+boolean columnrep;
+
+String datacap2 = " DATA CAPTURE CHANGES;";
+
+String callSysproc = "CALL SYSPROC.ADMIN_CMD('REORG TABLE ";              
+String callSysproc2 = "CALL SYSPROC.ADMIN_CMD('REORG INDEXES ALL FOR TABLE ";
+String callSysproc2a = " ALLOW WRITE ACCESS');";
+String callSysproc3 = "CALL SYSPROC.ADMIN_CMD('RUNSTATS ON TABLE ";
+String callSysproc3a = " FOR DETAILED INDEXES ALL');";
+String greenzone = "delete from asn.ibmqrep_colversion where tableid1 in (select tableid1 from asn.ibmqrep_tabversion where source_name = '";
+String greenzone2 = "' and source_owner= '";
+String greenzone3 = "') and tableid2 in (select tableid2 from asn.ibmqrep_tabversion where source_name = '";
+String greenzone4 = "' and source_owner= '";
+String greenzoneA = "delete from asn.ibmqrep_tabversion where tableid1 in (select tableid1 from asn.ibmqrep_tabversion where source_name = '";
+String greenzone2A = "' and source_owner= '";
+String greenzone3A = "') and tableid2 in (select tableid2 from asn.ibmqrep_tabversion where source_name = '";
+String greenzone4A = "' and source_owner= '";   
+String change = ".CD";
+String bzrep = ("INSERT INTO ASN.IBMSNAP_SUBS_COLS (APPLY_QUAL, SET_NAME , WHOS_ON_FIRST, TARGET_OWNER, TARGET_TABLE, COL_TYPE, TARGET_NAME, IS_KEY, COLNO, EXPRESSION) values ('R2FPDF',");
+String bzrep2 = ("'S'");
+String bzrep3 = ("'A',");
+String bzrep4 = ("'N', 8,");
+String blueRemove1 = "DELETE FROM ASN.IBMSNAP_SUBS_COLS WHERE TARGET_OWNER =";
+String blueRemove2 = "AND TARGET_NAME=";
+
+
+
+
+    /**
+     * @param args the command line arguments
+     */
+public static void main(String[] args) {
+       boolean contScriptGen = true;
+       //String statement;      
+       ScriptGenerator Generate = new ScriptGenerator();
+             
+       do{
+       Generate.Optionsmenu();       
+       contScriptGen = Generate.contScriptGen();       
+       Generate.writeBZScriptFile();
+       Generate.writeGZScriptFile();
+       
+       } while (contScriptGen);
+           Generate.printResults();
+           Generate.writeBZScriptFile();  
+           Generate.writeGZScriptFile();
+    }
+   
+public void Optionsmenu(){
+     System.out.println("Welcome to the SQL Script Generator, what would you like to do? Here are some options:");
+     System.out.println(" ");
+     System.out.println("Do you want to Alter (ALT), Insert (INS), or Create New Table (NEW)?"); 
+     statement = scan.nextLine();	
+     switch(statement) {
+         case "ALT":
+         case "alt":    
+             System.out.println("You chose: ALTER");
+	     AlterStatements(); 
+	break;             
+        case "INS":
+        case "ins":
+            System.out.println("You chose INSERT");
+            InsertStatements();            
+        break; 
+       // case "DEL":
+       // case "del":
+       //     System.out.println("You chose DELETE");
+      //  break;
+        //case "NEW":
+        //case "new":
+            //System.out.println("You chose CREATE NEW TABLE");
+           // createNewTable();                
+        default:
+            System.out.println("Enter an option:"); //loop through to ask for a valid option
+            //work on default 
+            //make a "validate" method to take in valid values            
+} 
+}
+
+public void AlterStatements(){
+    System.out.println("What would you like to ALTER? TABLE (TAB), VIEW (VIE), or INDEX (IND)");
+    altInput = scan.nextLine();
+        switch (altInput){
+           case "T":
+           case "t":
+           case "TAB":
+           case "Tab":
+           case "tab":
+               System.out.println("What is the schema name?");
+               altInput = "TABLE";
+               schemaname = scan.nextLine();
+               System.out.println("What is the table name?");
+               tablename = scan.nextLine();
+               schematable = (schemaname + "." + tablename);   
+               alterIn = altInput + " " + schematable;
+           break;           
+           case "vie":
+           case "VIE":
+           case "Vie":
+           case "V":
+           case "v":
+               System.out.println("What is the view name to be altered?");
+               altInput = "VIEW";
+               //schematable = scan.nextLine();
+               //make other variables for these? 
+           break;           
+           case "IND":
+           case "ind":
+           case "Ind":
+           case "I":
+           case "i":
+               System.out.println("What is the index name to be altered?");
+               altInput = "INDEX";
+               //schematable = scan.nextLine(); 
+               //make other variables for these? 
+           break;           
+           default:
+               System.out.println("Please enter an option:");
+               //schematable = scan.nextLine();
+               //make other variable for this? 
+        }
+        System.out.println("Is there replication for this table? Y/N");        
+        String replication = scan.nextLine();
+
+                switch (replication){
+                        case "Y":
+                        case "y":
+                        case "yes":
+                        case "YES":
+                            System.out.println("Does replication go from Blue Zone to Green Zone? Y/N");
+                            String repbzgz = scan.nextLine();
+                                switch (repbzgz){
+                                    case "Y":
+                                    case "y":
+                                    case "YES":
+                                    case "Yes":
+                                    case "yes":
+                                        System.out.println ("Replication occurs from Blue Zone to Green Zone");
+                                        String datacap = " DATA CAPTURE NONE;";
+                                        repstate = ("ALTER " + alterIn + datacap);
+                                        //BZList.add(repstate);
+                                        //GZList.add(repstate);
+                                        repstate2 = ("ALTER " + alterIn);
+                                        //BZList.add(repstate2);
+                                        //GZList.add(repstate2);
+                                        bzreplication();
+                             
+                                    break;
+                                    case "N":
+                                    case "n":
+                                    case "NO":
+                                    case "No":
+                                    case "no":
+                                        System.out.println("Replication occurs from Green Zone to Blue Zone");
+                                        datacap = " DATA CAPTURE NONE;";
+                                        repstate = ("ALTER " + alterIn + datacap);
+                                        //GZList.add(repstate);
+                                       // BZList.add(repstate);
+                                        repstate2 = ("ALTER " + alterIn);
+                                        //GZList.add(repstate2);
+                                        //BZList.add(repstate2);
+                                        gzreplication();     
+                                    break;
+                                }                                
+                        break;          
+                        case "N":
+                        case "n":
+                        case "NO":
+                        case "No":
+                        case "no":
+                            System.out.println("No replication for this table");
+                            repstate = "ALTER " + alterIn;
+                            BZList.add(repstate);
+                            GZList.add(repstate);
+                            noreplication();
+                }             
+}    
+
+public void bzreplication(){
+    
+    System.out.println("Would you like to Add (A), or Change Column Length (C)?");
+    String commandopt = scan.nextLine();
+        switch (commandopt){
+            case "A":
+            case "a":
+            case "add":
+            case "Add":
+            case "ADD":
+                GZList.add(repstate);
+                GZList.add(repstate2);
+                BZList.add(repstate);
+                BZList.add(repstate2);
+                commandopt = "ADD COLUMN";
+                System.out.println("How many columns would you like to add?");
+                int stnum = scan.nextInt();
+                int i = 0;
+                scan.nextLine();
+                    do{
+                        System.out.println("What is the column name?");
+                        colname = scan.nextLine();
+                        System.out.println("What is the datatype of " + colname + "? Integer (INT), Smallint (SINT), Bigint (BINT), Decimal (DEC), Char (CHA), Varchar (VCH), Blob (BLO), Clob (CLO), Date (DAT), or Timestamp (TSP)?");
+                        datatype = scan.nextLine();                    
+                            switch (datatype){
+                                case "INT":
+                                case "int":
+                                    System.out.println("You chose Integer");
+                                    datatype = "INTEGER";
+                                break;                        
+                                case "SINT":
+                                case "sint":
+                                    System.out.println("You chose Smallint");
+                                    datatype = "SINT";
+                                break;                        
+                                case "BINT":
+                                case "bint":
+                                    System.out.println("You chose Bigint");
+                                    datatype = "BINT";
+                                break;                        
+                                case "DEC":
+                                case "dec":
+                                    System.out.println("You chose Decimal");
+                                    datatype = "DECIMAL";
+                                break;                        
+                                case "CHA":
+                                case "cha":
+                                    System.out.println("You chose Character");
+                                    datatype = "CHAR";
+                                break;                        
+                                case "VCH":
+                                case "vch":
+                                    System.out.println("You chose VARCHAR");
+                                    datatype = "VARCHAR";
+                                break;                        
+                                case "BLO":
+                                case "blo":
+                                    System.out.println("You chose BLOB");
+                                    datatype = "BLOB";
+                                break;                       
+                                case "CLO":
+                                case "clo":
+                                    System.out.println("You chose CLOB");
+                                    datatype = "CLOB";
+                                break;                        
+                                case "DAT":
+                                case "dat":
+                                    System.out.println("You chose DATE");
+                                    datatype = "DATE";
+                                break;                        
+                                case "TSP":
+                                case "tsp":
+                                    System.out.println("You chose TIMESTAMP");
+                                    datatype = "TIMESTAMP";
+                                break;                      
+                            }
+                 
+                            switch (datatype){
+                                case "DECIMAL":
+                                    System.out.println("What is the decimal length and precision? Type as length,precision");
+                                    String lengthprec = scan.nextLine();
+                                    repstate = (commandopt + " " + colname + " " + datatype + " (" + lengthprec + ")");
+                                    AlterList.add(repstate);
+                                    System.out.println("Is this column included in replication? Y/N");
+                                    colrep = scan.nextLine();
+                                    switch (colrep){
+                                            case "Y":
+                                            case "y":
+                                            case "yes":
+                                            case "Yes":
+                                            case "YES":
+                                                InsertList.add(schematable);
+                                                InsertList.add(schemaname);
+                                                InsertList.add(tablename);
+                                                InsertList.add(colname);
+                                                InsertList.add(colname);                                                         
+                                            break;
+                                            case "N":
+                                            case "n":
+                                            case "No":
+                                            case "no":
+                                            case "NO":
+                                                colrep = "NO";
+                                                columnrep = false;
+                                            break;
+                                    }                                                                                           
+                                break;                               
+                                case "CHAR":
+                                case "VARCHAR":
+                                    System.out.println("What is the field length?");
+                                    String charlength = scan.nextLine();
+                                    System.out.println("Do you want this column to have a default value? Y/N");
+                                    String defval = scan.nextLine();
+                                        switch (defval){
+                                            case "Y":
+                                            case "y":
+                                            case "YES":
+                                            case "yes":
+                                                System.out.println("You chose yes, what would you like the default value to be?"); 
+                                                defval = scan.nextLine();
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ")" + " " + defval);       
+                                                AlterList.add(repstate);
+                                                System.out.println("Is this column included in replication? Y/N");
+                                                colrep = scan.nextLine();
+                                                    switch (colrep){
+                                                        case "Y":
+                                                        case "y":
+                                                        case "yes":
+                                                        case "Yes":
+                                                        case "YES":
+                                                            InsertList.add(schematable);
+                                                            InsertList.add(schemaname);
+                                                            InsertList.add(tablename);
+                                                            InsertList.add(colname);
+                                                            InsertList.add(colname);                                                         
+                                                        break;
+                                                        case "N":
+                                                        case "n":
+                                                        case "No":
+                                                        case "no":
+                                                        case "NO":
+                                                            colrep = "NO";
+                                                            columnrep = false;
+                                                    }
+                                                System.out.println("Your script has been added to the file");                                           
+                                            break;                                
+                                            case "N":
+                                            case "n":
+                                            case "NO":
+                                            case "no": 
+                                                System.out.println("You chose no");
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ")");
+                                                //ScriptList.add(repstate); 
+                                                AlterList.add(repstate);
+                                                System.out.println("Is this column included in replication? Y/N");
+                                                colrep = scan.nextLine();
+                                                    switch (colrep){
+                                                        case "Y":
+                                                        case "y":
+                                                        case "yes":
+                                                        case "Yes":
+                                                        case "YES":
+                                                            InsertList.add(schematable);
+                                                            InsertList.add(schemaname);
+                                                            InsertList.add(tablename);
+                                                            InsertList.add(colname);
+                                                            InsertList.add(colname);  
+                                                        break;
+                                                        case "N":
+                                                        case "n":
+                                                        case "No":
+                                                        case "no":
+                                                        case "NO":
+                                                            colrep = "NO";
+                                                            columnrep = false;
+                                                        break;
+                                                    }
+                                                System.out.println("Your script has been added to the file");
+                                            break;
+                                        }
+                                break;                              
+                                default:
+                                    repstate = (commandopt + " " + colname + " " + datatype);                                                                                       
+                                    //ScriptList.add(repstate);
+                                    AlterList.add(repstate);
+                                    System.out.println("Is this column included in replication? Y/N");
+                                    colrep = scan.nextLine();
+                                        switch (colrep){
+                                            case "Y":
+                                            case "y":
+                                            case "yes":
+                                            case "Yes":
+                                            case "YES":
+                                                    InsertList.add(schematable);
+                                                    InsertList.add(schemaname);
+                                                    InsertList.add(tablename);
+                                                    InsertList.add(colname);
+                                                    InsertList.add(colname);  
+                                            break;
+                                            case "N":
+                                            case "n":
+                                            case "No":
+                                            case "no":
+                                            case "NO":
+                                                colrep = "NO";
+                                                columnrep = false;
+                                            break;
+                                }
+                                System.out.println("Your script has been added to the file");
+                                break;    
+                                }                                               
+                                i++;  
+                                
+                    } while (i < stnum);
+                                                       
+                            for(int j=0; j<AlterList.size(); j++) {
+                                BZList.add(AlterList.get(j));
+                                GZList.add(AlterList.get(j));
+                                }
+                                String terminator = ";";
+                                BZList.add(terminator);
+                                GZList.add(terminator);
+                                
+                                String repstate2a = ("ALTER " + alterIn + datacap2);
+                                BZList.add(repstate2a);
+                                GZList.add(repstate2a);
+                                                             	 
+                                String blue = (callSysproc + schematable + "');"); 
+                                BZList.add(blue);
+                                String blue2 = (callSysproc2 + schematable + callSysproc2a);
+                                BZList.add(blue2);
+                                String blue3 = (callSysproc3 + schematable + callSysproc3a); 
+                                BZList.add(blue3);
+                                                                       
+                                String blue2A = ("ALTER " + altInput + " " + schemaname + change + tablename);
+                                BZList.add(blue2A);
+                                    
+                                for(int j=0; j<AlterList.size(); j++) {
+                                    BZList.add(AlterList.get(j));
+                                    }
+                                
+                                terminator = ";";
+                                BZList.add(terminator);                                   
+                                    //this is the insert into... statement
+                                    int insertListOffset = 5;
+                                    int count = 0;
+                                        for (int k=0; k<InsertList.size()/insertListOffset; k++) {
+                                            bluerep = (bzrep + "'" + InsertList.get(count) + "',"); 
+                                            count++; 
+                                            //to get the second element in the array
+                                            bluerep2 = (bzrep2 + "'" + InsertList.get(count) + "',");
+                                            count++;
+                                            //to get the third element in the array
+                                            bluerep3 = ("'" + InsertList.get(count) + "'," + bzrep3);
+                                            count++; 
+                                            //to get the 4th element in the array
+                                            bluerep4 = ("'" + InsertList.get(count) + "',");
+                                            count++;
+                                            bluerep5 = (bzrep4 + "'" + InsertList.get(count) + "');");
+                                            count++;
+                                            bluerepfinal = (bluerep + bluerep2 + bluerep3 + bluerep4 + bluerep5);
+                                            BZList.add(bluerepfinal);                      
+                                    }                                                                
+                                String greenrep = (greenzone + tablename + greenzone2 + schemaname + greenzone3 + tablename + greenzone4 + schemaname + "');");
+                                GZList.add(greenrep);
+                                    
+                                String greenrep2 = (greenzoneA + tablename + greenzone2A + schemaname + greenzone3A + tablename + greenzone4A + schemaname + "');");
+                                GZList.add(greenrep2);                                                                                                 
+            break;
+          /*  case "D":
+            case "d":
+            case "DROP":
+            case "drop":
+            case "Drop":
+                commandopt = "DROP COLUMN ";
+                System.out.println("How many columns would you like to DROP?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+                do{
+                System.out.println("What is the column name you would like to DROP?");
+                colname = scan.nextLine();
+                System.out.println("You have chosen to DROP " + colname + " from " + altInput + " " + schematable);
+                String dropColumn = (commandopt + colname);
+                AlterList.add(dropColumn);
+                i++;
+                } while (i < stnum);
+                
+                String alterSt = ("ALTER " + alterIn);
+                BZList.add(alterSt);
+                GZList.add(alterSt);
+              
+                for (int j = 0; j <AlterList.size(); j++) {
+                        BZList.add(AlterList.get(j));
+                        GZList.add(AlterList.get(j));
+                }
+                               
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);
+                
+                String green = (callSysproc + schematable + "');"); 
+                BZList.add(green);
+                GZList.add(green);
+                String green2 = (callSysproc2 + schematable + callSysproc2a);
+                BZList.add(green2);
+                GZList.add(green2);
+                String green3 = (callSysproc3 + schematable + callSysproc3a); 
+                BZList.add(green3);
+                GZList.add(green3);
+                String dropChangeCol = ("ALTER TABLE " + schemaname + change + tablename);
+                BZList.add(dropChangeCol);
+                
+                for (int j = 0; j <AlterList.size(); j++) {
+                    BZList.add(AlterList.get(j));
+                    GZList.add(AlterList.get(j));
+                }
+                
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);               
+                
+                blue = (callSysproc + schemaname + change + tablename + ");");
+                BZList.add(blue);
+                blue2 = (callSysproc2 + schemaname + change + tablename + callSysproc2a);
+                BZList.add(blue2);
+                blue3 = (callSysproc3 + schemaname + change + tablename + callSysproc3a);
+                BZList.add(blue3);                
+                String blueRemove = (blueRemove1 + "'" + schemaname + "'" + blueRemove2 + "'" + colname + "'");
+                BZList.add(blueRemove);                
+                System.out.println("Your script has been added to the file");            
+                
+            break; */
+            case "C":
+            case "c":
+            case "Cha":
+            case "cha":
+            case "CHA":
+            case "Change":
+            case "change":
+            case "CHANGE":
+                commandopt = "ALTER COLUMN";
+                String setData = "SET DATA TYPE";
+                System.out.println("How many columns would you like to change?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+                do {
+                    System.out.println("Name the column you are changing the length to:");
+                    colname = scan.nextLine();
+                    System.out.println("What is the datatype of " + colname + "? Decimal (DEC), Char (CHA), Varchar (VCH)?");
+                    datatype = scan.nextLine();
+                    switch (datatype) {
+                        case "DEC":
+                        case "dec":
+                            System.out.println("You chose DECIMAL");
+                            datatype = "DEC";
+                        break;
+                        case "CHA":
+                        case "cha":
+                            System.out.println("You chose CHARACTER");
+                            datatype = "CHAR";
+                        break;
+                        case "VCH":
+                        case "vch":
+                            System.out.println("You chose VARCHAR");
+                            datatype = "VARCHAR";
+                        break;	
+                    }	
+                    switch (datatype) {
+                        case "DEC":
+                            System.out.println("What is the new decimal length and precision? type as length,precision");
+                            String lengthprec = scan.nextLine();
+                            repstate = (commandopt + " " + colname + " " + setData + " " + datatype + " (" + lengthprec + ")");
+                            AlterList.add(repstate);
+                        break;
+                        case "CHAR":
+                        case "VARCHAR":
+                            System.out.println("What is the new field length?");
+                            String charlength = scan.nextLine();
+                            System.out.println("Do you want this column to have a default value? Y/N");
+                            String defval = scan.nextLine();
+                            switch (defval) {
+                                case "Y":
+                                case "y":
+                                    System.out.println("You chose yes, what would you like the default value to be?");
+                                    defval = scan.nextLine();
+                                    repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ") " + defval);
+                                    AlterList.add(repstate);
+                                break;
+                                case "N":
+                                case "n":
+                                    System.out.println("You chose no");
+                                    repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ")");
+                                    AlterList.add(repstate);
+                                break;	
+                            }	
+                        break;
+                    }
+                i++;	
+                } while (i < stnum);
+
+                String altStatement = ("ALTER TABLE " + schematable);
+                BZList.add(altStatement);
+                GZList.add(altStatement);
+
+                for (int j=0; j<AlterList.size(); j++) {
+                        BZList.add(AlterList.get(j));
+                        GZList.add(AlterList.get(j));
+                }
+               
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);
+                
+                repstate2 = (callSysproc + schematable + ";");
+                BZList.add(repstate2);
+                GZList.add(repstate2);
+                String repstate3 = (callSysproc2 + schematable + " " + callSysproc2a);
+                BZList.add(repstate3);
+                GZList.add(repstate3);
+                String repstate4 = (callSysproc3 + schematable + callSysproc3a);
+                BZList.add(repstate4);
+                GZList.add(repstate4);
+                altStatement = ("ALTER TABLE " + schemaname + change + tablename );
+                BZList.add(altStatement);
+                
+                for (int j =0; j<AlterList.size(); j++) {
+                        BZList.add(AlterList.get(j));
+                }
+                
+                terminator = ";";
+                BZList.add(terminator);
+                
+                blue = (callSysproc + schemaname + change + tablename + ";");
+                BZList.add(blue);
+                blue2 = (callSysproc2 + schemaname + change + tablename + ";");
+                BZList.add(blue2);
+                blue3 = (callSysproc3 + schemaname + change + tablename + ";");
+                BZList.add(blue3);                    
+                System.out.println("Your script has been added to the file");
+        }      
+}
+
+public void gzreplication(){
+       
+    System.out.println("Would you like to Add (A), or Change Column Length/Data type (C)?");
+    String commandopt = scan.nextLine();
+        switch (commandopt){
+            case "A":
+            case "a":
+            case "add":
+            case "Add":
+            case "ADD":
+                GZList.add(repstate);
+                GZList.add(repstate2);
+                BZList.add(repstate);
+                BZList.add(repstate2);
+                commandopt = "ADD COLUMN";
+                System.out.println("How many columns would you like to add?");
+                int stnum = scan.nextInt();
+                int i = 0;
+                scan.nextLine();
+                    do{
+                        System.out.println("What is the column name?");
+                        colname = scan.nextLine();
+                        System.out.println("What is the datatype of " + colname + "? Integer (INT), Smallint (SINT), Bigint (BINT), Decimal (DEC), Char (CHA), Varchar (VCH), Blob (BLO), Clob (CLO), Date (DAT), or Timestamp (TSP)?");
+                        datatype = scan.nextLine();                    
+                            switch (datatype){
+                                case "INT":
+                                case "int":
+                                    System.out.println("You chose Integer?");
+                                    datatype = "INTEGER";
+                                break;                        
+                                case "SINT":
+                                case "sint":
+                                    System.out.println("You chose Smallint");
+                                    datatype = "SINT";
+                                break;                        
+                                case "BINT":
+                                case "bint":
+                                    System.out.println("You chose Bigint");
+                                    datatype = "BINT";
+                                break;                        
+                                case "DEC":
+                                case "dec":
+                                    System.out.println("You chose Decimal");
+                                    datatype = "DECIMAL";
+                                break;                        
+                                case "CHA":
+                                case "cha":
+                                    System.out.println("You chose Character");
+                                    datatype = "CHAR";
+                                break;                        
+                                case "VCH":
+                                case "vch":
+                                    System.out.println("You chose VARCHAR");
+                                    datatype = "VARCHAR";
+                                break;                        
+                                case "BLO":
+                                case "blo":
+                                    System.out.println("You chose BLOB");
+                                    datatype = "BLOB";
+                                break;                       
+                                case "CLO":
+                                case "clo":
+                                    System.out.println("You chose CLOB");
+                                    datatype = "CLOB";
+                                break;                        
+                                case "DAT":
+                                case "dat":
+                                    System.out.println("You chose DATE");
+                                    datatype = "DATE";
+                                break;                        
+                                case "TSP":
+                                case "tsp":
+                                    System.out.println("You chose TIMESTAMP");
+                                    datatype = "TIMESTAMP";
+                                break;                      
+                            }                 
+                            switch (datatype){
+                                case "DECIMAL":
+                                    System.out.println("What is the decimal length and precision? Type as length,precision");
+                                    String lengthprec = scan.nextLine();
+                                    //System.out.println("Do you want this column to have a default value? Y/N");
+                                    repstate = (commandopt + " " + colname + " " + datatype + " (" + lengthprec + ")");
+                                    AlterList.add(repstate);
+                                    System.out.println("Is this column included in replication? Y/N");
+                                        colrep = scan.nextLine();
+                                                    switch (colrep){
+                                                        case "Y":
+                                                        case "y":
+                                                        case "yes":
+                                                        case "Yes":
+                                                        case "YES":
+                                                            InsertList.add(schematable);
+                                                            InsertList.add(schemaname);
+                                                            InsertList.add(tablename);
+                                                            InsertList.add(colname);
+                                                            InsertList.add(colname);                                                         
+                                                        break;
+                                                        case "N":
+                                                        case "n":
+                                                        case "No":
+                                                        case "no":
+                                                        case "NO":
+                                                            colrep = "NO";
+                                                            columnrep = false;
+                                                        break;
+                                                    }
+                                                    System.out.println("Your script has been added to the file");                                                                                             
+                                break;                              
+                                case "CHAR":
+                                case "VARCHAR":
+                                    System.out.println("What is the field length?");
+                                    String charlength = scan.nextLine();
+                                    System.out.println("Do you want this column to have a default value? Y/N");
+                                    String defval = scan.nextLine();
+                                        switch (defval){
+                                            case "Y":
+                                            case "y":
+                                            case "YES":
+                                            case "yes":
+                                                System.out.println("You chose yes, what would you like the default value to be?"); 
+                                                defval = scan.nextLine();
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ")" + " " + defval);    
+                                                AlterList.add(repstate);
+                                                System.out.println("Is this column included in replication? Y/N");
+                                                colrep = scan.nextLine();
+                                                 switch (colrep){
+                                                        case "Y":
+                                                        case "y":
+                                                        case "yes":
+                                                        case "Yes":
+                                                        case "YES":
+                                                            InsertList.add(schematable);
+                                                            InsertList.add(schemaname);
+                                                            InsertList.add(tablename);
+                                                            InsertList.add(colname);
+                                                            InsertList.add(colname);                                                         
+                                                        break;
+                                                        case "N":
+                                                        case "n":
+                                                        case "No":
+                                                        case "no":
+                                                        case "NO":
+                                                            colrep = "NO";
+                                                            columnrep = false;
+                                                        break;
+                                                }
+                                                System.out.println("Your script has been added to the file");
+                                                
+                                            break;                                
+                                            case "N":
+                                            case "n":
+                                            case "NO":
+                                            case "no": 
+                                                System.out.println("You chose no");
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ")");
+                                                //ScriptList.add(repstate); 
+                                                AlterList.add(repstate);
+                                                System.out.println("Is this column included in replication? Y/N");
+                                                colrep = scan.nextLine();
+                                                switch (colrep){
+                                                    case "Y":
+                                                    case "y":
+                                                    case "yes":
+                                                    case "Yes":
+                                                    case "YES":
+                                                        colrep = "YES";
+                                                        columnrep = true;
+                                                        InsertList.add(schematable);
+                                                        InsertList.add(schemaname);
+                                                        InsertList.add(tablename);
+                                                        InsertList.add(colname);
+                                                        InsertList.add(colname);                                                         
+                                                    break;
+                                                    case "N":
+                                                    case "n":
+                                                    case "No":
+                                                    case "no":
+                                                    case "NO":
+                                                        colrep = "NO";
+                                                        columnrep = false;
+                                                    break;
+                                                }                         
+                                                System.out.println("Your script has been added to the file");
+                                            break;
+                                        }
+                                break;                              
+                                default:
+                                    repstate = (commandopt + " " + colname + " " + datatype);                                                                                       
+                                    AlterList.add(repstate);
+                                    System.out.println("Is this column included in replication? Y/N");
+                                    colrep = scan.nextLine();
+                                        switch (colrep){
+                                            case "Y":
+                                            case "y":
+                                            case "yes":
+                                            case "Yes":
+                                            case "YES":
+                                                    InsertList.add(schematable);
+                                                    InsertList.add(schemaname);
+                                                    InsertList.add(tablename);
+                                                    InsertList.add(colname);
+                                                    InsertList.add(colname);                                                         
+                                            break;       
+                                            case "N":
+                                            case "n":
+                                            case "No":
+                                            case "no":
+                                            case "NO":
+                                                colrep = "NO";
+                                                columnrep = false;
+                                            break;
+                                        }
+                                        System.out.println("Your script has been added to the file");
+                                break;    
+                            }                                                
+                                i++;     
+                    } while (i < stnum);
+                                 
+                        for (int j=0; j<AlterList.size(); j++){
+                            BZList.add(AlterList.get(j));
+                            GZList.add(AlterList.get(j));
+                        }
+                        String terminator = ";";
+                        BZList.add(terminator);
+                        GZList.add(terminator);
+
+                        String repstate2a = ("ALTER " + alterIn + datacap2);
+                        BZList.add(repstate2a);
+                        GZList.add(repstate2a);
+
+                        //script execution on blue and green zone 
+                        String green = (callSysproc + schematable + "');"); 
+                        BZList.add(green);
+                        String green2 = (callSysproc2 + schematable + callSysproc2a);
+                        BZList.add(green2);
+                        String green3 = (callSysproc3 + schematable + callSysproc3a); 
+                        BZList.add(green3);
+
+                        //script execution on blue zone                                       
+                        int insertListOffset = 5;
+                        int count = 0;
+                            for (int k=0; k<InsertList.size()/insertListOffset; k++) {
+                                bluerep = (bzrep + "'" + InsertList.get(count) + "',"); 
+                                count++; 
+                                //to get the second element in the array
+                                bluerep2 = (bzrep2 + "'" + InsertList.get(count) + "',"); 
+                                count++;
+                                //to get the third element in the array
+                                bluerep3 = ("'" + InsertList.get(count) + "'," + bzrep3);
+                                count++; 
+                                //to get the 4th element in the array
+                                bluerep4 = ("'" + InsertList.get(count) + "',"); 
+                                count++;        
+                                bluerep5 = (bzrep4 + "'" + InsertList.get(count) + "');");
+                                count++;
+                                bluerepfinal = (bluerep + bluerep2 + bluerep3 + bluerep4 + bluerep5);
+                                BZList.add(bluerepfinal);                      
+                        }
+
+                        String green2A = ("ALTER " + altInput + " " + schemaname + change + tablename);
+                        GZList.add(green2A);
+
+                        for (int j=0; j<AlterList.size(); j++){
+                            GZList.add(AlterList.get(j));
+                        }
+                        
+                        terminator = ";";
+                        GZList.add(terminator);
+
+                        String greenrep = (greenzone + tablename + greenzone2 + schemaname + greenzone3 + tablename + greenzone4 + schemaname + "');");
+                        GZList.add(greenrep);
+                        String greenrep2 = (greenzoneA + tablename + greenzone2A + schemaname + greenzone3A + tablename + greenzone4A + schemaname + "');");
+                        GZList.add(greenrep2);
+            break;
+            /* case "D":
+            case "d":
+            case "Drop":
+            case "DROP":
+            case "drop":
+                commandopt = "DROP COLUMN ";
+                System.out.println("How many columns would you like to DROP?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+                    do{
+                    System.out.println("What is the column name you would like to DROP?");
+                    colname = scan.nextLine();
+                    String dropColumn = (commandopt + colname);
+                    AlterList.add(dropColumn);
+                    i++;
+                    } while (i < stnum);
+                
+                String alterSt = ("ALTER " + alterIn);
+                BZList.add(alterSt);
+                GZList.add(alterSt);
+                                      
+                for (int j = 0; j <AlterList.size(); j++) {
+                    BZList.add(AlterList.get(j));
+                    GZList.add(AlterList.get(j));
+                }
+                
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);
+                
+                green = (callSysproc + schematable + "');"); 
+                BZList.add(green);
+                GZList.add(green);
+                green2 = (callSysproc2 + schematable + callSysproc2a);
+                BZList.add(green2);
+                GZList.add(green2);
+                green3 = (callSysproc3 + schematable + callSysproc3a); 
+                BZList.add(green3);
+                GZList.add(green3);
+                String dropChangeCol = ("ALTER TABLE " + schemaname + change + tablename);
+                GZList.add(dropChangeCol);
+                
+                for (int j = 0; j <AlterList.size(); j++) {
+                    GZList.add(AlterList.get(j));
+                }
+                
+                terminator = ";";
+                GZList.add(terminator);
+                
+                green = (callSysproc + schemaname + change + tablename + ");");
+                GZList.add(green);
+                green2 = (callSysproc2 + schemaname + change + tablename + callSysproc2a);
+                GZList.add(green2);
+                green3 = (callSysproc3 + schemaname + change + tablename + callSysproc3a);
+                GZList.add(green3);              
+                String blueRemove = (blueRemove1 + "'" + schemaname + "'" + blueRemove2 + "'" + colname + "';");
+                BZList.add(blueRemove);                
+                System.out.println("Your script has been added to the file");
+            break; */
+            case "C":
+            case "c":
+            case "Cha":
+            case "cha":
+            case "CHA":
+            case "Change":
+            case "change":
+            case "CHANGE":
+                commandopt = "ALTER COLUMN";
+                String setData = "SET DATA TYPE";
+
+                System.out.println("How many columns would you like to change?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+                do {
+                    System.out.println("Name the column you are changing:");
+                    colname = scan.nextLine();
+                    System.out.println("What is the datatype of " + colname + "? Decimal (DEC), Char (CHA), Varchar (VCH)?");
+                    datatype = scan.nextLine();
+                    switch (datatype) {
+                    case "DEC":
+                    case "dec":
+                            System.out.println("You chose DECIMAL");
+                            datatype = "DEC";
+                    break;
+                    case "CHA":
+                    case "cha":
+                            System.out.println("You chose CHARACTER");
+                            datatype = "CHAR";
+                    break;
+                    case "VCH":
+                    case "vch":
+                            System.out.println("You chose VARCHAR");
+                            datatype = "VARCHAR";
+                    break;	
+                    }
+                    
+                    switch (datatype) {
+                    case "DEC":
+                        System.out.println("What is the decimal length and precision? type as length,precision");
+                        String lengthprec = scan.nextLine();
+                        repstate = (commandopt + " " + colname + " " + setData + " " + datatype + " (" + lengthprec + ")");
+                        AlterList.add(repstate);                   
+                    break;
+                    case "CHAR":
+                    case "VARCHAR":
+                        System.out.println("What is the field length?");
+                        String charlength = scan.nextLine();
+                        System.out.println("Do you want this column to have a default value? Y/N");
+                        String defval = scan.nextLine();
+                            switch (defval) {
+                            case "Y":
+                            case "y":
+                                System.out.println("You chose yes, what would you like the default value to be?");
+                                defval = scan.nextLine();
+                                repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ") " + defval);
+                                AlterList.add(repstate);
+                            break;
+                            case "N":
+                            case "n":
+                                System.out.println("You chose no");
+                                repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ") ");
+                                AlterList.add(repstate);
+                            break;	
+                    }	
+                    break;
+                    }
+                    i++;	
+                } while (i < stnum);
+              
+                BZList.add(repstate2);
+                GZList.add(repstate2);
+
+                for (int j=0; j<AlterList.size(); j++) {
+                        BZList.add(AlterList.get(j));
+                        GZList.add(AlterList.get(j));
+                }
+
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);               
+                repstate2 = (callSysproc + schematable + ";");
+                BZList.add(repstate2);
+                GZList.add(repstate2);
+                String repstate3 = (callSysproc2 + schematable + " " + callSysproc2a);
+                BZList.add(repstate3);
+                GZList.add(repstate3);
+                String repstate4 = (callSysproc3 + schematable + callSysproc3a);
+                BZList.add(repstate4);
+                GZList.add(repstate4);
+                repstate2 = (commandopt + " " + schemaname + change + tablename );
+                GZList.add(repstate2);
+                
+                for (int j =0; j<AlterList.size(); j++) {
+                        GZList.add(AlterList.get(j));
+                }
+                
+                terminator = ";";
+                GZList.add(terminator);
+                
+                green = (callSysproc + schemaname + change + tablename + ";");
+                GZList.add(green);
+                green2 = (callSysproc2 + schemaname + change + tablename + ";");
+                GZList.add(green2);
+                green3 = (callSysproc3 + schemaname + change + tablename + ";");
+                GZList.add(green3);
+                System.out.println("Your script has been added to the file");
+         }                    
+}
+
+public void noreplication(){
+    
+    System.out.println("Would you like to Add (A), or Change Column Length/Data type (C)?");
+    String commandopt = scan.nextLine();
+        switch (commandopt){
+            case "A":
+            case "a":
+            case "add":
+            case "Add":
+            case "ADD":
+                commandopt = "ADD COLUMN";
+                System.out.println("How many columns would you like to add?");
+                int stnum = scan.nextInt();
+                int i = 0;
+                scan.nextLine();
+                    do{
+                        System.out.println("What is the column name?");
+                        colname = scan.nextLine();
+                        System.out.println("What is the datatype of " + colname + "? Integer (INT), Smallint (SINT), Bigint (BINT), Decimal (DEC), Char (CHA), Varchar (VCH), Blob (BLO), Clob (CLO), Date (DAT), or Timestamp (TSP)?");
+                        datatype = scan.nextLine();                    
+                            switch (datatype){
+                                case "INT":
+                                case "int":
+                                    System.out.println("You chose Integer");
+                                    datatype = "INT";
+                                break;                        
+                                case "SINT":
+                                case "sint":
+                                    System.out.println("You chose Smallint");
+                                    datatype = "SINT";
+                                break;                        
+                                case "BINT":
+                                case "bint":
+                                    System.out.println("You chose Bigint");
+                                    datatype = "BINT";
+                                break;                        
+                                case "DEC":
+                                case "dec":
+                                    System.out.println("You chose Decimal");
+                                    datatype = "DECIMAL";
+                                break;                        
+                                case "CHA":
+                                case "cha":
+                                    System.out.println("You chose Character");
+                                    datatype = "CHAR";
+                                break;                        
+                                case "VCH":
+                                case "vch":
+                                    System.out.println("You chose VARCHAR");
+                                    datatype = "VARCHAR";
+                                break;                        
+                                case "BLO":
+                                case "blo":
+                                    System.out.println("You chose BLOB");
+                                    datatype = "BLOB";
+                                break;                       
+                                case "CLO":
+                                case "clo":
+                                    System.out.println("You chose CLOB");
+                                    datatype = "CLOB";
+                                break;                        
+                                case "DAT":
+                                case "dat":
+                                    System.out.println("You chose DATE");
+                                    datatype = "DATE";
+                                break;                        
+                                case "TSP":
+                                case "tsp":
+                                    System.out.println("You chose TIMESTAMP");
+                                    datatype = "TIMESTAMP";
+                                break;                      
+                            }                 
+                            switch (datatype){
+                                case "DECIMAL":
+                                    System.out.println("What is the decimal length and precision? Type as length,precision");
+                                    String lengthprec = scan.nextLine();
+                                    repstate = (commandopt + " " + colname + " " + datatype + " (" + lengthprec + ")");
+                                    BZList.add(repstate);
+                                    GZList.add(repstate);
+                                    System.out.println("Your script has been added to the file");                                                    
+                                break;                               
+                                case "CHAR":
+                                case "VARCHAR":
+                                    System.out.println("What is the field length?");
+                                    String charlength = scan.nextLine();
+                                    System.out.println("Do you want this column to have a default value? Y/N");
+                                    String defval = scan.nextLine();
+                                        switch (defval){
+                                            case "Y":
+                                            case "y":
+                                            case "YES":
+                                            case "yes":
+                                                System.out.println("You chose yes, what would you like the default value to be?"); 
+                                                defval = scan.nextLine();
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ") " + defval);                
+                                                BZList.add(repstate);
+                                                GZList.add(repstate); 
+                                                System.out.println("Your script has been added to the file");
+                                            break;                               
+                                            case "N":
+                                            case "n":
+                                            case "NO":
+                                            case "no": 
+                                                System.out.println("You chose no");
+                                                repstate = (commandopt + " " + colname + " " + datatype + "(" + charlength + ")");
+                                                BZList.add(repstate);
+                                                GZList.add(repstate);
+                                                System.out.println("Your script has been added to the file");
+                                            break;
+                                        }
+                                break;                              
+                                default:
+                                    repstate = (commandopt + " " + colname + " " + datatype);                                                                                           
+                                    BZList.add(repstate);
+                                    GZList.add(repstate);
+                                    System.out.println("Your script has been added to the file");
+                                break;    
+                                }                                               
+                                i++;                                    
+                    } while (i < stnum);
+                       
+                        String terminator = ";";
+                        BZList.add(terminator);
+                        GZList.add(terminator);                                     
+                       
+                        String noreptable1 = (callSysproc + schematable + "');");    
+                        BZList.add(noreptable1);
+                        GZList.add(noreptable1);
+                        String noreptable2 = (callSysproc2 + schematable + " " + callSysproc2a);
+                        BZList.add(noreptable2);
+                        GZList.add(noreptable2);
+                        String noreptable3 = (callSysproc3 + schematable + callSysproc3a);
+                        BZList.add(noreptable3);
+                        GZList.add(noreptable3);                       
+            break;            
+           /* case "D":
+            case "d":
+            case "Drop":
+            case "DROP":
+            case "drop": 
+                commandopt = "DROP COLUMN ";
+                System.out.println("How many columns would you like to DROP?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+                
+                do{
+                   System.out.println("Name the column you would like to DROP:");
+                   colname = scan.nextLine();
+                   System.out.println("You have chosen to DROP " + colname + " from " + altInput + " " + schematable);
+                   String alterremst = (commandopt + colname);
+                   AlterList.add(alterremst);
+                   //System.out.println("Your script has been added to the file");
+                   i++;
+                }while (i < stnum);
+
+                for(int j=0; j<AlterList.size(); j++) {
+                    BZList.add(AlterList.get(j));
+                    GZList.add(AlterList.get(j));
+                }               
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);
+                
+                noreptable1 = (callSysproc + schematable + "');");    
+                BZList.add(noreptable1);
+                GZList.add(noreptable1);
+                noreptable2 = (callSysproc2 + schematable + " " + callSysproc2a);
+                BZList.add(noreptable2);
+                GZList.add(noreptable2);
+                noreptable3 = (callSysproc3 + schematable + callSysproc3a);
+                BZList.add(noreptable3);
+                GZList.add(noreptable3);
+                System.out.println("Your script has been added to the file");                
+            break; */
+            case "C":
+            case "c":
+            case "Cha":
+            case "cha":
+            case "CHA":
+            case "Change":
+            case "change":
+            case "CHANGE":
+                commandopt = "ALTER COLUMN";
+                String setData = "SET DATA TYPE";
+
+                System.out.println("How many columns would you like to change?");
+                stnum = scan.nextInt();
+                i = 0;
+                scan.nextLine();
+
+                do {
+                    System.out.println("Name the column you are changing:");
+                    colname = scan.nextLine();
+                    System.out.println("What is the datatype of " + colname + "? Decimal (DEC), Char (CHA), Varchar (VCH)?");
+                    datatype = scan.nextLine();
+                        switch (datatype) {
+                            case "DEC":
+                            case "dec":
+                                    System.out.println("You chose DECIMAL");
+                                    datatype = "DEC";
+                            break;
+                            case "CHA":
+                            case "cha":
+                                    System.out.println("You chose CHARACTER");
+                                    datatype = "CHAR";
+                            break;
+                            case "VCH":
+                            case "vch":
+                                    System.out.println("You chose VARCHAR");
+                                    datatype = "VARCHAR";
+                            break;	
+                        }
+	
+                        switch (datatype) {
+                            case "DEC":
+                                System.out.println("What is the decimal length and precision? type as length,precision");
+                                String lengthprec = scan.nextLine();                                
+                                repstate = (commandopt + " " + colname + " " + setData + " " + datatype + " (" + lengthprec + ")");
+                                AlterList.add(repstate);
+                            break;
+                            case "CHAR":
+                            case "VARCHAR":
+                                System.out.println("What is the field length?");
+                                String charlength = scan.nextLine();
+                                System.out.println("Do you want this column to have a default value? Y/N");
+                                String defval = scan.nextLine();
+                                    switch (defval) {
+                                    case "Y":
+                                    case "y":
+                                        System.out.println("You chose yes, what would you like the default value to be?");
+                                        defval = scan.nextLine();
+                                        repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ") " + defval);
+                                        AlterList.add(repstate);
+                                    break;
+                                    case "N":
+                                    case "n":
+                                        System.out.println("You chose no");
+                                        repstate = (commandopt + " " + colname + " " + setData + " " + datatype + "(" + charlength + ")");
+                                        AlterList.add(repstate);
+                                    break;	
+                            }	
+                            break;
+                        }               
+                        i++;	
+                } while (i < stnum);
+
+                for (int j=0; j<AlterList.size(); j++) {
+                    BZList.add(AlterList.get(j));
+                    GZList.add(AlterList.get(j));
+                }
+                terminator = ";";
+                BZList.add(terminator);
+                GZList.add(terminator);
+                               
+                repstate2 = (callSysproc + schematable + "');");
+                BZList.add(repstate2);
+                GZList.add(repstate2);
+                String repstate3 = (callSysproc2 + schematable + " " + callSysproc2a);
+                BZList.add(repstate3);
+                GZList.add(repstate3);
+                String repstate4 = (callSysproc3 + schematable + callSysproc3a);
+                BZList.add(repstate4);
+                GZList.add(repstate4);               
+                System.out.println("Your script has been added to the file");               
+}
+}
+
+public void InsertStatements(){
+    System.out.println("This will be your Insert Statement");
+}
+
+public void createNewOptions(){
+    System.out.println("Would you like to create a TABLE (TAB), INDEX (IND), or a TABLESPACE (TBS)?");
+    String create = scan.nextLine();
+        switch (create) {
+            case "TAB":
+            case "tab":
+            case "Tab":
+                System.out.println("You chose TABLE");
+                create = "CREATE TABLE";
+                createNewTable();
+            break;
+            case "IND":
+            case "ind":
+            case "Ind":
+                System.out.println("You chose INDEX");
+            break;
+            case "TBS":
+            case "tbs":
+            case "Tbs":
+                System.out.println("You chose TABLESPACE");
+            break;            
+        }   
+}
+
+public void createNewTable(){
+    
+    
+    System.out.println("What is the table name?");
+    tablename = scan.nextLine();
+    System.out.println("What is the schema?");
+    schemaname = scan.nextLine(); 
+    schematable = schemaname + "." + tablename;
+    String create = "CREATE TABLE";
+    
+    System.out.println("Are you adding this to a specific tablespace? Y/N");
+    String tablespace = scan.nextLine();
+        switch (tablespace) {
+            case "Y":
+            case "YES":
+            case "yes":
+            case "Yes":
+                System.out.println("You chose yes");
+                System.out.println("What is the name of the tablespace?");
+                tbsname = scan.nextLine();
+            break;
+            case "N":
+            case "No":
+            case "NO":
+            case "no":
+                System.out.println("You chose no, default tablespace selected");
+                tbsname = "IN USERSPACE1";                     
+        }
+    
+    System.out.println("How many columns would you like to add?");
+    int stnum = scan.nextInt();
+    int i = 0;
+    scan.nextLine();
+        do {
+            System.out.println("How many columns would you like to add?");
+            colname = scan.nextLine();
+            System.out.println("What is the datatype of " + colname + "? Integer (INT), Smallint (SINT), Bigint (BINT), Decimal (DEC), Char (CHA), Varchar (VCH), Blob (BLO), Clob (CLO), Date (DAT), or Timestamp (TSP)?");
+             datatype = scan.nextLine();                    
+                    switch (datatype){
+                        case "INT":
+                        case "int":
+                            System.out.println("You chose Integer");
+                            datatype = "INT";
+                        break;                        
+                        case "SINT":
+                        case "sint":
+                            System.out.println("You chose Smallint");
+                            datatype = "SINT";
+                        break;                        
+                        case "BINT":
+                        case "bint":
+                            System.out.println("You chose Bigint");
+                            datatype = "BINT";
+                        break;                        
+                        case "DEC":
+                        case "dec":
+                            System.out.println("You chose Decimal");
+                            datatype = "DEC";
+                        break;                        
+                                case "CHA":
+                                case "cha":
+                                    System.out.println("You chose Character");
+                                    datatype = "CHAR";
+                                break;                        
+                                case "VCH":
+                                case "vch":
+                                    System.out.println("You chose VARCHAR");
+                                    datatype = "VARCHAR";
+                                break;                        
+                                case "BLO":
+                                case "blo":
+                                    System.out.println("You chose BLOB");
+                                    datatype = "BLOB";
+                                break;                       
+                                case "CLO":
+                                case "clo":
+                                    System.out.println("You chose CLOB");
+                                    datatype = "CLOB";
+                                break;                        
+                                case "DAT":
+                                case "dat":
+                                    System.out.println("You chose DATE");
+                                    datatype = "DATE";
+                                break;                        
+                                case "TSP":
+                                case "tsp":
+                                    System.out.println("You chose TIMESTAMP");
+                                    datatype = "TSP";
+                                break;                      
+                            }
+                    switch (datatype){
+                        case "DEC":
+                            System.out.println("What is the decimal length and precision? Type as length.precision");
+                            String lengthprec = scan.nextLine();
+                            System.out.println("Do you want this column to have a default value? Y/N");
+                            String defval = scan.nextLine();
+                                switch (defval){    
+                                    case "Y":
+                                    case "y":
+                                        System.out.println("You chose yes, what would you like the default value to be?"); 
+                                        defval = scan.nextLine();                                                                
+                                        repstate = (colname + " " + datatype + " " + lengthprec + " " + defval);
+                                        //null / not null?
+                                        //ScriptList.add(repstate);
+                                        System.out.println("Your script has been added to the file");
+                                    break;
+                                    case "N":
+                                    case "n": //don't add the with default 
+                                        System.out.println("You chose no");                       
+                                        repstate = (colname + " " + datatype + " " + lengthprec);
+                                      //ScriptList.add(repstate);
+                                        System.out.println("Your script has been added to the file");
+                                    break;
+                                       }                                                      
+                        break;                                
+                        case "CHAR":
+                        case "VARCHAR":
+                            System.out.println("What is the field length?");
+                            String charlength = scan.nextLine();
+                            System.out.println("Do you want this column to have a default value? Y/N");
+                            defval = scan.nextLine();
+                                switch (defval){
+                                    case "Y":
+                                    case "y":
+                                    case "YES":
+                                    case "yes":
+                                        System.out.println("You chose yes, what would you like the default value to be?"); 
+                                        defval = scan.nextLine();
+                                        repstate = (colname + " " + datatype + "(" + charlength + ") " + defval);                
+                                        //ScriptList.add(repstate); 
+                                        System.out.println("Your script has been added to the file");
+                                    break;
+                                    case "N":
+                                    case "n":
+                                    case "NO":
+                                    case "no": 
+                                        System.out.println("You chose no");
+                                        repstate = (colname + " " + datatype + charlength);
+                                       //ScriptList.add(repstate); 
+                                        System.out.println("Your script has been added to the file");
+                                    break;
+                                }
+                        break;                              
+                        default:
+                            repstate = (colname + " " + datatype);                                                                                           
+                           //ScriptList.add(repstate);
+                            System.out.println("Your script has been added to the file");
+                        break;    
+                    }                                                   
+                    
+                    
+                    
+            i++;            
+        } while (i<stnum);
+   
+    System.out.println("Is this table a part of replication?");
+    String replication = scan.nextLine();
+        switch (replication) {
+            case "yes":
+            case "YES":
+            case "Yes":
+                System.out.println("You chose yes");
+                System.out.println("Does replication occur from Blue Zone to Green Zone? Y/N");
+                String repbzgz = scan.nextLine();
+                    switch (repbzgz){
+                        case "YES":
+                        case "yes":
+                        case "Yes":
+                            System.out.println("Replication occurs from Blue Zone to Green Zone");
+                        break;
+                        case "NO":
+                        case "No":
+                        case "no":
+                            System.out.println("Replication occurs from Green Zone to Blue Zone");
+                        break;
+                    } 
+            
+        }
+        
+        
+    String createTable = (create + " " + " IN " + tbsname); //this will be added to
+    //add this to 
+    
+
+    System.out.println("What is the tablespace?");
+    //String tablespace = scan.nextLine();
+    //add to an array? 
+    
+
+
+    //add to an array? 
+    //what is the syntax for adding a table 
+    
+    
+    //ask would you like to add anything to the table
+    //permissions? 
+    //are you creating the tablespace AND the table? or is the tablespace already created.
+    
+    //ask the column names, etc. same code.
+    
+    
+    
+    //null/not null
+    //in (where is table being created)
+    //do you ask about replication? 
+    
+    
+}
+
+public boolean contScriptGen() {
+    System.out.println("Do you want to generate another set of SQL scripts? Y/N");
+    String x = scan.nextLine();
+    
+    switch(x){
+        case "yes":
+        case "YES":
+        case "Yes":
+        case "y":
+        case "Y":
+            contScriptGen = true;
+        break;
+        default:
+            contScriptGen = false;        
+    }
+    return contScriptGen;
+}
+
+public void printResults(){
+    
+    System.out.println("Script Execution on Blue Zone:");
+    System.out.println(" ");
+    for (int t = 0; t < BZList.size(); t++){
+	System.out.println(BZList.get(t));
+}
+    System.out.println(" ");
+    System.out.println(" ");
+    System.out.println("Script Execution on Green Zone:");
+    System.out.println(" ");
+    for (int s = 0; s < GZList.size(); s++){
+       System.out.println(GZList.get(s));
+   }
+}
+
+public void writeBZScriptFile(){
+ try{
+         FileWriter writeFile = new FileWriter("BZScripts.sql");
+         BufferedWriter out = new BufferedWriter(writeFile);
+         for(int t = 0; t < BZList.size(); t++){
+            out.write(BZList.get(t));
+            out.newLine();
+         }
+         out.close();
+      }
+      catch(IOException ioe){
+         System.out.println("Exception: " + ioe);
+      }
+  }  
+
+public void writeGZScriptFile(){
+ try{
+         FileWriter writeFile = new FileWriter("GZScripts.sql");
+         BufferedWriter out = new BufferedWriter(writeFile);
+         
+         for(int t = 0; t < GZList.size(); t++){
+            out.write(GZList.get(t));
+            out.newLine();
+         }
+         out.close();
+      }
+      catch(IOException ioe){
+         System.out.println("Exception: " + ioe);
+      }
+  }
+
+}
